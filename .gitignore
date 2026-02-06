@@ -1,6 +1,6 @@
 test_data
 train_data
 model/model.pt
-likelihood_sub.zip
+likelihood_submission.zip
 backbone/
 weights/

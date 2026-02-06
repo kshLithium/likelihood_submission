@@ -169,11 +169,9 @@ def main():
         bf16=True,
         tf32=True,
         
-        # Logging & Saving (WandB 제거 -> none)
+        # Logging & Saving (단 1개의 pt 파일만 남기도록 설정)
         report_to="none",
-        save_strategy="steps",
-        save_steps=200,         # training.py 원본 값
-        save_total_limit=10,    # training.py 원본 값
+        save_strategy="no",
         eval_strategy="epoch",
         load_best_model_at_end=False,
         
@@ -201,10 +199,30 @@ def main():
     print("[*] Initiating Trainer.train()...")
     trainer.train()
     
-    # 8. 최종 모델 저장
-    trainer.save_model(OUTPUT_DIR)
+    # 8. 최종 모델 저장 (가중치 병합 및 단일 .pt 파일 생성)
     if is_main_process():
-        print("[*] Done!")
+        print(f"[*] Saving final model to {OUTPUT_DIR}...")
+        
+        # Trainer 내부의 최신 모델 가져오기
+        trained_model = trainer.model
+        if hasattr(trained_model, "module"):
+            trained_model = trained_model.module
+        
+        # PEFT를 사용하는 경우 가중치를 병합하여 일반 모델 형태로 변환
+        if USE_PEFT:
+            print("[*] Merging PEFT weights for single .pt file...")
+            final_model = trained_model.merge_and_unload()
+        else:
+            final_model = trained_model
+
+        # model.pt 파일 하나만 생성
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        model_path = os.path.join(OUTPUT_DIR, "model.pt")
+        
+        # CPU로 옮겨서 저장 (추후 로드 시 범용성 보장)
+        torch.save(final_model.to("cpu").state_dict(), model_path)
+        
+        print(f"[*] Done! Final weight saved to: {model_path}")
 
 
 if __name__ == "__main__":

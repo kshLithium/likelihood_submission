@@ -1,0 +1,27 @@
+# [1] Data Paths
+# 절대경로 대신 제출 폴더 기준 상대경로 사용
+data_root_base: "./train_data"
+json_base: "./config/dataset_json"
+
+# [2] Model
+# 원본 config.py의 MODEL_ID
+backbone_model: "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+# 원본 config.py의 DEFAULT_OUTPUT_BASE
+output_dir: "./weights/dinov3-h+"
+
+# [3] Hyperparameters
+# 원본 config.py의 상수 값들
+image_size: 224
+target_compression: "c23"
+epochs: 3                       # NUM_EPOCHS
+batch_size: 32                  # BATCH_SIZE
+learning_rate: 1e-3             # 1e-3
+seed: null                      # SEED (null이면 미설정)
+num_workers: 8                  # NUM_WORKERS
+use_peft: true                 # USE_PEFT
+
+# [4] Arguments (Defaults)
+# 원본 argparse의 default 값들
+num_frames_per_video: 12        # args.num_frames (default 12)
+multitask: false                # args.multitask (default false)
+label_smoothing: 0.0            # args.label_smoothing (default 0.0)

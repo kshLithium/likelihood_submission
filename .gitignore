@@ -4,3 +4,4 @@ model/model.pt
 likelihood_submission.zip
 backbone/
 weights/
+cropped/

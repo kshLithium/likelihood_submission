@@ -21,6 +21,8 @@ WORKDIR /workspace/likelihood_submission
 COPY env/requirements.txt /tmp/requirements.txt
 
 RUN python -m pip install --upgrade pip && \
+    python -m pip uninstall -y opencv opencv-python opencv-python-headless opencv-contrib-python opencv-contrib-python-headless || true && \
+    rm -rf /usr/local/lib/python3.10/dist-packages/cv2* /usr/lib/python3/dist-packages/cv2* || true && \
     pip install --no-cache-dir --upgrade-strategy only-if-needed -r /tmp/requirements.txt
 
 COPY . /workspace/likelihood_submission

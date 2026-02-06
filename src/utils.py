@@ -44,6 +44,7 @@ DATA_ROOT_BASE = _cfg.get("data_root_base", "/data/train_data")
 JSON_BASE = _cfg.get("json_base", "/data/train_data/json")
 
 MODEL_ID = _cfg.get("backbone_model", "facebook/dinov3-vith16plus-pretrain-lvd1689m")
+BACKBONE_DIR = _cfg.get("backbone_dir", "./backbone")
 OUTPUT_DIR = _cfg.get("output_dir", "./outputs")
 
 IMAGE_SIZE = int(_cfg.get("image_size", 224))

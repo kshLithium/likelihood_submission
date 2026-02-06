@@ -1,4 +1,6 @@
 test_data
 train_data
 model/model.pt
-DF40_all.json
+likelihood_sub.zip
+backbone/
+weights/

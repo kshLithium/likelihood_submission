@@ -16,15 +16,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace/your_submission
+WORKDIR /workspace/likelihood_submission
 
 COPY env/requirements.txt /tmp/requirements.txt
-RUN python -m pip install --upgrade pip && \
-    pip install -r /tmp/requirements.txt
 
-COPY . /workspace/your_submission
+RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir --upgrade-strategy only-if-needed -r /tmp/requirements.txt
+
+COPY . /workspace/likelihood_submission
 
 ENV OMP_NUM_THREADS=8 \
     MKL_NUM_THREADS=8
 
-CMD ["python", "inference.py"]
+# CMD ["python", "inference.py"]

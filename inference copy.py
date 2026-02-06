@@ -1403,8 +1403,8 @@ def get_args():
 
     parser.add_argument("--skip_preprocess", action="store_true", help="Skip detector preprocessing and reuse cropped_dir")
     parser.add_argument("--clean_cropped", action="store_true", help="Delete cropped_dir before preprocessing")
-    parser.add_argument("--crop_workers", type=int, default=16, help="Preprocessing thread count")
-    parser.add_argument("--loader_workers", type=int, default=16, help="Dataloader workers")
+    parser.add_argument("--crop_workers", type=int, default=8, help="Preprocessing thread count")
+    parser.add_argument("--loader_workers", type=int, default=4, help="Dataloader workers")
 
     parser.add_argument("--det_thres", type=float, default=0.5, help="RetinaFace detection threshold")
     parser.add_argument("--nms_thresh", type=float, default=0.4, help="RetinaFace NMS threshold")

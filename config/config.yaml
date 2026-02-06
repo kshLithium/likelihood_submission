@@ -6,6 +6,8 @@ json_base: "./config/dataset_json"
 # [2] Model
 # 원본 config.py의 MODEL_ID
 backbone_model: "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+# 로컬 백본 루트 폴더 (train.py는 여기서만 로드)
+backbone_dir: "./backbone"
 # 원본 config.py의 DEFAULT_OUTPUT_BASE
 output_dir: "./weights/dinov3-h+"
 

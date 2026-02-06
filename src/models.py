@@ -1,17 +1,47 @@
+import os
 import torch
 import torch.nn as nn
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModel
 from transformers.modeling_outputs import ImageClassifierOutput
 
-from .utils import MULTITASK, LABEL_SMOOTHING
+from .utils import MULTITASK, LABEL_SMOOTHING, BACKBONE_DIR
 from .utils import label_smoothing_cross_entropy
+
+
+def _resolve_local_backbone_path(model_id):
+    """
+    Resolve local backbone path only.
+    Priority:
+      1) model_id itself as a local directory
+      2) <BACKBONE_DIR>/<model_id>
+    """
+    if os.path.isdir(model_id):
+        return model_id
+
+    candidate = os.path.join(BACKBONE_DIR, model_id)
+    if os.path.isdir(candidate):
+        return candidate
+
+    raise FileNotFoundError(
+        "Local backbone not found.\n"
+        f"  - model_id path: {os.path.abspath(model_id)}\n"
+        f"  - backbone path: {os.path.abspath(candidate)}\n"
+        "Only local loading is supported. Put the backbone files under "
+        "<backbone_dir>/<backbone_model> or set backbone_model to a local directory path."
+    )
+
 
 class DINOv3ForClassification(nn.Module):
     def __init__(self, model_id, class_weights=None):
         super().__init__()
-        print(f"[*] Loading Backbone: {model_id}")
-        self.backbone = AutoModel.from_pretrained(model_id, trust_remote_code=True)
+        local_backbone_path = _resolve_local_backbone_path(model_id)
+        print(f"[*] Loading Backbone (local-only): {local_backbone_path}")
+        self.backbone = AutoModel.from_pretrained(
+            local_backbone_path,
+            trust_remote_code=True,
+            local_files_only=True,
+        )
 
         for param in self.backbone.parameters():
             param.requires_grad = False

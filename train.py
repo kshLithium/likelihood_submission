@@ -201,7 +201,8 @@ def main():
     
     # 8. 최종 모델 저장 (가중치 병합 및 단일 .pt 파일 생성)
     if is_main_process():
-        print(f"[*] Saving final model to {OUTPUT_DIR}...")
+        final_model_dir = os.path.join(_PROJECT_ROOT, "model")
+        print(f"[*] Saving final merged model to {final_model_dir}...")
         
         # Trainer 내부의 최신 모델 가져오기
         trained_model = trainer.model
@@ -215,9 +216,9 @@ def main():
         else:
             final_model = trained_model
 
-        # model.pt 파일 하나만 생성
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        model_path = os.path.join(OUTPUT_DIR, "model.pt")
+        # 요청사항: 최종 병합 가중치는 model/model.pt 단일 파일로 저장
+        os.makedirs(final_model_dir, exist_ok=True)
+        model_path = os.path.join(final_model_dir, "model.pt")
         
         # CPU로 옮겨서 저장 (추후 로드 시 범용성 보장)
         torch.save(final_model.to("cpu").state_dict(), model_path)

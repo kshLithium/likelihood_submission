@@ -5,3 +5,5 @@ likelihood_submission.zip
 backbone/
 weights/
 cropped/
+*__pycache__*/
+*.pyc

@@ -105,7 +105,7 @@ class DINOv3ForClassification(nn.Module):
                     targets = targets * (1.0 - eps) + (1.0 - targets) * eps
                 loss = self.loss_fct(logits, targets)
 
-        return ImageClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.last_hidden_state)
+        return ImageClassifierOutput(loss=loss, logits=logits)
 
 
 def build_peft_model(model):

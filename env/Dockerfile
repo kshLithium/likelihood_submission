@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace/likelihood_submission
+WORKDIR /likelihood_submission
 
 COPY env/requirements.txt /tmp/requirements.txt
 
@@ -25,7 +25,7 @@ RUN python -m pip install --upgrade pip && \
     rm -rf /usr/local/lib/python3.10/dist-packages/cv2* /usr/lib/python3/dist-packages/cv2* || true && \
     pip install --no-cache-dir --upgrade-strategy only-if-needed -r /tmp/requirements.txt
 
-COPY . /workspace/likelihood_submission
+COPY . /likelihood_submission
 
 ENV OMP_NUM_THREADS=8 \
     MKL_NUM_THREADS=8

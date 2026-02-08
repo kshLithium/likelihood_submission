@@ -158,11 +158,14 @@ def main():
         num_train_epochs=NUM_EPOCHS,
         learning_rate=LEARNING_RATE,
         per_device_train_batch_size=BATCH_SIZE,
-        per_device_eval_batch_size=64,
+        per_device_eval_batch_size=BATCH_SIZE,  # training batch size와 동일하게 유지하거나 필요 시 조절
         
         # Optimizer & Scheduler
         lr_scheduler_type="cosine",
         warmup_steps=200,       # training.py 원본 값
+        
+        # Memory Management
+        eval_accumulation_steps=1, # 검증 시 예측값을 즉시 CPU로 옮겨 VRAM 누수 방지
         
         # Hardware Acceleration (training.py 원본 값)
         fp16=False,

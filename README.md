@@ -83,8 +83,8 @@ docker build -f env/Dockerfile -t likelihood-submission:latest .
 예:
 ```bash
 docker run --gpus all --shm-size=90g --rm -it \
-  -v $(pwd):/workspace/likelihood_submission \
-  -w /workspace/likelihood_submission \
+  -v $(pwd):/likelihood_submission \
+  -w /likelihood_submission \
   likelihood-submission:latest bash
 ```
 
@@ -96,6 +96,32 @@ python inference.py
 ### 6.4 학습데이터 다운로드
 학습데이터를 train_data에 위치시키면 됩니다.
 학습 데이터 링크: https://drive.google.com/file/d/1xSmhkJoTs_QNQ9wkRuK2Uoz__Eeh456V/view?usp=sharing
+
+예시 디렉토리 구조(`train_data/train_data`처럼 중첩되지 않도록 주의):
+```text
+train_data/
+├── Celeb-DF-v1/
+├── Celeb-DF-v2/
+├── FaceForensics++/
+├── DFDC/
+├── DFDCP/
+├── UADFV/
+├── ffhq/
+├── celeba_data/
+├── deepfacelab/
+├── faceswap/
+├── one_shot_free/
+├── wav2lip/
+├── StyleGAN2/
+├── StyleGAN3/
+├── StyleGANXL/
+├── VQGAN/
+├── DiT/
+├── SiT/
+├── MidJourney/
+├── pixart/
+└── ... (기타 데이터 폴더들)
+```
 
 
 ### 6.5 컨테이너 내부에서 학습 실행

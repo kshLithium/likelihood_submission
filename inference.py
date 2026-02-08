@@ -1214,7 +1214,7 @@ class DINOv3ForClassification(nn.Module):
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(logits, labels.long())
 
-        return ImageClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.last_hidden_state)
+        return ImageClassifierOutput(loss=loss, logits=logits)
 
 
 def _resolve_model_pt_path(weight_path):

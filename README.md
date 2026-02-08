@@ -95,6 +95,7 @@ python inference.py
 
 ### 6.4 학습데이터 다운로드
 학습데이터를 train_data에 위치시키면 됩니다.
+학습 데이터 링크: https://drive.google.com/file/d/1xSmhkJoTs_QNQ9wkRuK2Uoz__Eeh456V/view?usp=sharing
 
 
 ### 6.5 컨테이너 내부에서 학습 실행
@@ -111,7 +112,7 @@ python inference.py
 ```
 
 주의: GPU 종류, 드라이버/CUDA/패키지 버전, 영상 디코딩 환경(ffmpeg 등)에 따라 얼굴 크롭 결과가 미세하게 달라질 수 있습니다.
-따라서 비트 단위의 완전한 재현성은 보장되지 않으며, 최종 제출 전 운영 환경에서 반드시 재실행해 결과를 확인하세요.
+따라서 비트 단위의 완전한 재현성은 보장되지 않습니다.
 
 ### 7.2 입출력 형식
 - 출력 파일: `result/submission.csv`

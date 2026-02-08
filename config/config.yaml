@@ -16,7 +16,7 @@ output_dir: "./weights/dinov3-h+"
 image_size: 224
 target_compression: "c23"
 epochs: 3                       # NUM_EPOCHS
-batch_size: 32                  # BATCH_SIZE
+batch_size: 64                  # BATCH_SIZE
 learning_rate: 1e-3             # 1e-3
 seed: null                      # SEED (null이면 미설정)
 num_workers: 8                  # NUM_WORKERS

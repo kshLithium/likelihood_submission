@@ -1,6 +1,5 @@
 import os
 import json
-import random
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
@@ -12,7 +11,7 @@ from tqdm import tqdm
 # Config는 기존 구조 유지 가정
 from .utils import (
     DATA_ROOT_BASE, NUM_FRAMES_PER_VIDEO, TARGET_COMPRESSION, 
-    MULTITASK, IMAGE_SIZE, JSON_BASE
+    MULTITASK, IMAGE_SIZE, JSON_BASE, USE_CLIP, TEST_DATASET_PRESET
 )
 from .utils import is_main_process
 
@@ -61,93 +60,130 @@ LABEL_MAP = {
 
 DATASETS = [
     { "name": "FaceForensics++", "json": f"{JSON_BASE}/FaceForensics++.json", "enabled": True },
-    { "name": "Celeb-DF-v2", "json": f"{JSON_BASE}/Celeb-DF-v2.json", "enabled": True },
-    { "name": "celeba_data", "json": f"{JSON_BASE}/celeba_data.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/celeba_data" },
-    { "name": "UTKFace-Cropped", "json": f"{JSON_BASE}/UTKFace-Cropped.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/UTKFace-Cropped" },
-    { "name": "ffhq", "json": f"{JSON_BASE}/ffhq.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/ffhq" },
-    { "name": "imdb_wiki", "json": f"{JSON_BASE}/imdb_wiki.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/imdb_wiki" },
-    { "name": "whichisreal", "json": f"{JSON_BASE}/whichisreal.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/whichfaceisreal" },
-    { "name": "DFDC", "json": f"{JSON_BASE}/DFDC.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DFDC" },
-    { "name": "DFD", "json": f"{JSON_BASE}/DFD.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DFD" },
-    { "name": "CollabDiff", "json": f"{JSON_BASE}/CollabDiff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/CollabDiff" },
-    { "name": "DFDCP", "json": f"{JSON_BASE}/DFDCP.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DFDCP" },
-    { "name": "UADFV", "json": f"{JSON_BASE}/UADFV.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/UADFV" },
-    { "name": "styleclip", "json": f"{JSON_BASE}/styleclip.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/styleclip" },
-    { "name": "deepfacelab", "json": f"{JSON_BASE}/deepfacelab.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/deepfacelab" },
-    { "name": "heygen", "json": f"{JSON_BASE}/heygen.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/heygen" },
-    # DF40 - FF Source
-    { "name": "blendface_ff", "json": f"{JSON_BASE}/blendface_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/blendface/ff" },
-    { "name": "facedancer_ff", "json": f"{JSON_BASE}/facedancer_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facedancer/ff" },
-    { "name": "fomm_ff", "json": f"{JSON_BASE}/fomm_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fomm/ff" },
-    { "name": "inswap_ff", "json": f"{JSON_BASE}/inswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/inswap/ff" },
-    { "name": "simswap_ff", "json": f"{JSON_BASE}/simswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/simswap/ff" },
-    { "name": "hyperreenact_ff", "json": f"{JSON_BASE}/hyperreenact_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/hyperreenact/ff" },
-    { "name": "danet_ff", "json": f"{JSON_BASE}/danet_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/danet/ff" },
-    { "name": "faceswap_ff", "json": f"{JSON_BASE}/faceswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/faceswap/ff" },
-    { "name": "facevid2vid_ff", "json": f"{JSON_BASE}/facevid2vid_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facevid2vid/ff" },
-    { "name": "fsgan_ff", "json": f"{JSON_BASE}/fsgan_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fsgan/ff" },
-    { "name": "lia_ff", "json": f"{JSON_BASE}/lia_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/lia/ff" },
-    { "name": "mcnet_ff", "json": f"{JSON_BASE}/mcnet_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mcnet/ff" },
-    { "name": "mobileswap_ff", "json": f"{JSON_BASE}/mobileswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mobileswap/ff" },
-    { "name": "MRAA_ff", "json": f"{JSON_BASE}/MRAA_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/MRAA/ff" },
-    { "name": "one_shot_free_ff", "json": f"{JSON_BASE}/one_shot_free_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/one_shot_free/ff" },
-    { "name": "pirender_ff", "json": f"{JSON_BASE}/pirender_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pirender/ff" },
-    { "name": "sadtalker_ff", "json": f"{JSON_BASE}/sadtalker_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sadtalker/ff" },
-    { "name": "tpsm_ff", "json": f"{JSON_BASE}/tpsm_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/tpsm/ff" },
-    { "name": "wav2lip_ff", "json": f"{JSON_BASE}/wav2lip_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/wav2lip/ff" },
-    { "name": "ddim_ff", "json": f"{JSON_BASE}/ddim_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/ddim/ff" },
-    { "name": "DiT_ff", "json": f"{JSON_BASE}/DiT_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DiT/ff" },
-    { "name": "e4e_ff", "json": f"{JSON_BASE}/e4e_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4e/ff" },
-    { "name": "e4s_ff", "json": f"{JSON_BASE}/e4s_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4s/ff" },
-    { "name": "pixart_ff", "json": f"{JSON_BASE}/pixart_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pixart/ff" },
-    { "name": "rddm_ff", "json": f"{JSON_BASE}/rddm_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/RDDM/ff" },
-    { "name": "sd2.1_ff", "json": f"{JSON_BASE}/sd2.1_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sd2.1/ff" },
-    { "name": "SiT_ff", "json": f"{JSON_BASE}/SiT_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/SiT/ff" },
-    { "name": "StyleGAN2_ff", "json": f"{JSON_BASE}/StyleGAN2_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN2/ff" },
-    { "name": "StyleGAN3_ff", "json": f"{JSON_BASE}/StyleGAN3_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN3/ff" },
-    { "name": "StyleGANXL_ff", "json": f"{JSON_BASE}/StyleGANXL_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGANXL/ff" },
-    { "name": "VQGAN_ff", "json": f"{JSON_BASE}/VQGAN_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/VQGAN/ff" },
-    { "name": "uniface_ff", "json": f"{JSON_BASE}/uniface_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/uniface/ff" },
-    # DF40 - CDF Source
-    { "name": "blendface_cdf", "json": f"{JSON_BASE}/blendface_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/blendface/cdf" },
-    { "name": "facedancer_cdf", "json": f"{JSON_BASE}/facedancer_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facedancer/cdf" },
-    { "name": "fomm_cdf", "json": f"{JSON_BASE}/fomm_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fomm/cdf" },
-    { "name": "inswap_cdf", "json": f"{JSON_BASE}/inswap_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/inswap/cdf" },
-    { "name": "simswap_cdf", "json": f"{JSON_BASE}/simswap_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/simswap/cdf" },
-    { "name": "hyperreenact_cdf", "json": f"{JSON_BASE}/hyperreenact_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/hyperreenact/cdf" },
-    { "name": "danet_cdf", "json": f"{JSON_BASE}/danet_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/danet/cdf" },
-    { "name": "faceswap_cdf", "json": f"{JSON_BASE}/faceswap_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/faceswap/cdf" },
-    { "name": "facevid2vid_cdf", "json": f"{JSON_BASE}/facevid2vid_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facevid2vid/cdf" },
-    { "name": "fsgan_cdf", "json": f"{JSON_BASE}/fsgan_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fsgan/cdf" },
-    { "name": "lia_cdf", "json": f"{JSON_BASE}/lia_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/lia/cdf" },
-    { "name": "mcnet_cdf", "json": f"{JSON_BASE}/mcnet_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mcnet/cdf" },
-    { "name": "mobileswap_cdf", "json": f"{JSON_BASE}/mobileswap_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mobileswap/cdf" },
-    { "name": "MRAA_cdf", "json": f"{JSON_BASE}/MRAA_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/MRAA/cdf" },
-    { "name": "one_shot_free_cdf", "json": f"{JSON_BASE}/one_shot_free_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/one_shot_free/cdf" },
-    { "name": "pirender_cdf", "json": f"{JSON_BASE}/pirender_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pirender/cdf" },
-    { "name": "sadtalker_cdf", "json": f"{JSON_BASE}/sadtalker_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sadtalker/cdf" },
-    { "name": "tpsm_cdf", "json": f"{JSON_BASE}/tpsm_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/tpsm/cdf" },
-    { "name": "wav2lip_cdf", "json": f"{JSON_BASE}/wav2lip_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/wav2lip/cdf" },
-    { "name": "ddim_cdf", "json": f"{JSON_BASE}/ddim_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/ddim/cdf" },
-    { "name": "DiT_cdf", "json": f"{JSON_BASE}/DiT_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DiT/cdf" },
-    { "name": "e4e_cdf", "json": f"{JSON_BASE}/e4e_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4e/cdf" },
-    { "name": "e4s_cdf", "json": f"{JSON_BASE}/e4s_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4s/cdf" },
-    { "name": "rddm_cdf", "json": f"{JSON_BASE}/rddm_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/RDDM/cdf" },
-    { "name": "sd2.1_cdf", "json": f"{JSON_BASE}/sd2.1_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sd2.1/cdf" },
-    { "name": "SiT_cdf", "json": f"{JSON_BASE}/SiT_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/SiT/cdf" },
-    { "name": "StyleGAN2_cdf", "json": f"{JSON_BASE}/StyleGAN2_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN2/cdf" },
-    { "name": "StyleGAN3_cdf", "json": f"{JSON_BASE}/StyleGAN3_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN3/cdf" },
-    { "name": "StyleGANXL_cdf", "json": f"{JSON_BASE}/StyleGANXL_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGANXL/cdf" },
-    { "name": "VQGAN_cdf", "json": f"{JSON_BASE}/VQGAN_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/VQGAN/cdf" },
-    { "name": "uniface_cdf", "json": f"{JSON_BASE}/uniface_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/uniface/cdf" },
-    { "name": "pixart_cdf", "json": f"{JSON_BASE}/pixart_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pixart/cdf" },
-    { "name": "stargan", "json": f"{JSON_BASE}/stargan.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/stargan" },
-    { "name": "starganv2", "json": f"{JSON_BASE}/starganv2.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/starganv2" },
-    { "name": "midjourney_ff", "json": f"{JSON_BASE}/midjourney_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/midjourney/ff" },
-    { "name": "midjourney_cdf", "json": f"{JSON_BASE}/midjourney_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/midjourney/cdf" },
+   
+    # { "name": "celeba_data", "json": f"{JSON_BASE}/celeba_data.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/celeba_data" },
+    # { "name": "UTKFace-Cropped", "json": f"{JSON_BASE}/UTKFace-Cropped.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/UTKFace-Cropped" },
+    # { "name": "ffhq", "json": f"{JSON_BASE}/ffhq.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/ffhq" },
+    # { "name": "imdb_wiki", "json": f"{JSON_BASE}/imdb_wiki.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/imdb_wiki" },
+    # { "name": "whichisreal", "json": f"{JSON_BASE}/whichisreal.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/whichfaceisreal" },
+    
+    # { "name": "CollabDiff", "json": f"{JSON_BASE}/CollabDiff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/CollabDiff" },
+    # 
+    # 
+    # { "name": "styleclip", "json": f"{JSON_BASE}/styleclip.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/styleclip" },
+    # { "name": "deepfacelab", "json": f"{JSON_BASE}/deepfacelab.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/deepfacelab" },
+    # { "name": "heygen", "json": f"{JSON_BASE}/heygen.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/heygen" },
+    # # DF40 - FF Source
+    # { "name": "blendface_ff", "json": f"{JSON_BASE}/blendface_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/blendface/ff" },
+    # { "name": "facedancer_ff", "json": f"{JSON_BASE}/facedancer_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facedancer/ff" },
+    # { "name": "fomm_ff", "json": f"{JSON_BASE}/fomm_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fomm/ff" },
+    # { "name": "inswap_ff", "json": f"{JSON_BASE}/inswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/inswap/ff" },
+    # { "name": "simswap_ff", "json": f"{JSON_BASE}/simswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/simswap/ff" },
+    # { "name": "hyperreenact_ff", "json": f"{JSON_BASE}/hyperreenact_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/hyperreenact/ff" },
+    # { "name": "danet_ff", "json": f"{JSON_BASE}/danet_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/danet/ff" },
+    # { "name": "faceswap_ff", "json": f"{JSON_BASE}/faceswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/faceswap/ff" },
+    # { "name": "facevid2vid_ff", "json": f"{JSON_BASE}/facevid2vid_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facevid2vid/ff" },
+    # { "name": "fsgan_ff", "json": f"{JSON_BASE}/fsgan_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fsgan/ff" },
+    # { "name": "lia_ff", "json": f"{JSON_BASE}/lia_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/lia/ff" },
+    # { "name": "mcnet_ff", "json": f"{JSON_BASE}/mcnet_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mcnet/ff" },
+    # { "name": "mobileswap_ff", "json": f"{JSON_BASE}/mobileswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mobileswap/ff" },
+    # { "name": "MRAA_ff", "json": f"{JSON_BASE}/MRAA_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/MRAA/ff" },
+    # { "name": "one_shot_free_ff", "json": f"{JSON_BASE}/one_shot_free_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/one_shot_free/ff" },
+    # { "name": "pirender_ff", "json": f"{JSON_BASE}/pirender_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pirender/ff" },
+    # { "name": "sadtalker_ff", "json": f"{JSON_BASE}/sadtalker_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sadtalker/ff" },
+    # { "name": "tpsm_ff", "json": f"{JSON_BASE}/tpsm_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/tpsm/ff" },
+    # { "name": "wav2lip_ff", "json": f"{JSON_BASE}/wav2lip_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/wav2lip/ff" },
+    # { "name": "ddim_ff", "json": f"{JSON_BASE}/ddim_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/ddim/ff" },
+    # { "name": "DiT_ff", "json": f"{JSON_BASE}/DiT_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DiT/ff" },
+    # { "name": "e4e_ff", "json": f"{JSON_BASE}/e4e_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4e/ff" },
+    # { "name": "e4s_ff", "json": f"{JSON_BASE}/e4s_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4s/ff" },
+    # { "name": "pixart_ff", "json": f"{JSON_BASE}/pixart_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pixart/ff" },
+    # { "name": "rddm_ff", "json": f"{JSON_BASE}/rddm_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/RDDM/ff" },
+    # { "name": "sd2.1_ff", "json": f"{JSON_BASE}/sd2.1_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sd2.1/ff" },
+    # { "name": "SiT_ff", "json": f"{JSON_BASE}/SiT_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/SiT/ff" },
+    # { "name": "StyleGAN2_ff", "json": f"{JSON_BASE}/StyleGAN2_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN2/ff" },
+    # { "name": "StyleGAN3_ff", "json": f"{JSON_BASE}/StyleGAN3_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN3/ff" },
+    # { "name": "StyleGANXL_ff", "json": f"{JSON_BASE}/StyleGANXL_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGANXL/ff" },
+    # { "name": "VQGAN_ff", "json": f"{JSON_BASE}/VQGAN_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/VQGAN/ff" },
+    # { "name": "uniface_ff", "json": f"{JSON_BASE}/uniface_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/uniface/ff" },
+    # # DF40 - CDF Source
+    # { "name": "blendface_cdf", "json": f"{JSON_BASE}/blendface_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/blendface/cdf" },
+    # 
+    # { "name": "fomm_cdf", "json": f"{JSON_BASE}/fomm_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fomm/cdf" },
+    # 
+    # 
+    # { "name": "hyperreenact_cdf", "json": f"{JSON_BASE}/hyperreenact_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/hyperreenact/cdf" },
+    # { "name": "danet_cdf", "json": f"{JSON_BASE}/danet_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/danet/cdf" },
+    # { "name": "faceswap_cdf", "json": f"{JSON_BASE}/faceswap_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/faceswap/cdf" },
+    # { "name": "facevid2vid_cdf", "json": f"{JSON_BASE}/facevid2vid_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facevid2vid/cdf" },
+    # 
+    # { "name": "lia_cdf", "json": f"{JSON_BASE}/lia_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/lia/cdf" },
+    # { "name": "mcnet_cdf", "json": f"{JSON_BASE}/mcnet_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mcnet/cdf" },
+    # 
+    # { "name": "MRAA_cdf", "json": f"{JSON_BASE}/MRAA_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/MRAA/cdf" },
+    # { "name": "one_shot_free_cdf", "json": f"{JSON_BASE}/one_shot_free_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/one_shot_free/cdf" },
+    # { "name": "pirender_cdf", "json": f"{JSON_BASE}/pirender_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pirender/cdf" },
+    # { "name": "sadtalker_cdf", "json": f"{JSON_BASE}/sadtalker_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sadtalker/cdf" },
+    # { "name": "tpsm_cdf", "json": f"{JSON_BASE}/tpsm_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/tpsm/cdf" },
+    # { "name": "wav2lip_cdf", "json": f"{JSON_BASE}/wav2lip_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/wav2lip/cdf" },
+    # { "name": "ddim_cdf", "json": f"{JSON_BASE}/ddim_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/ddim/cdf" },
+    # { "name": "DiT_cdf", "json": f"{JSON_BASE}/DiT_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DiT/cdf" },
+    # { "name": "e4e_cdf", "json": f"{JSON_BASE}/e4e_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4e/cdf" },
+    # 
+    # { "name": "rddm_cdf", "json": f"{JSON_BASE}/rddm_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/RDDM/cdf" },
+    # { "name": "sd2.1_cdf", "json": f"{JSON_BASE}/sd2.1_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/sd2.1/cdf" },
+    # { "name": "SiT_cdf", "json": f"{JSON_BASE}/SiT_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/SiT/cdf" },
+    # { "name": "StyleGAN2_cdf", "json": f"{JSON_BASE}/StyleGAN2_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN2/cdf" },
+    # { "name": "StyleGAN3_cdf", "json": f"{JSON_BASE}/StyleGAN3_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGAN3/cdf" },
+    # { "name": "StyleGANXL_cdf", "json": f"{JSON_BASE}/StyleGANXL_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/StyleGANXL/cdf" },
+    # { "name": "VQGAN_cdf", "json": f"{JSON_BASE}/VQGAN_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/VQGAN/cdf" },
+    # 
+    # { "name": "pixart_cdf", "json": f"{JSON_BASE}/pixart_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/pixart/cdf" },
+    # { "name": "stargan", "json": f"{JSON_BASE}/stargan.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/stargan" },
+    # { "name": "starganv2", "json": f"{JSON_BASE}/starganv2.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/starganv2" },
+    # { "name": "midjourney_ff", "json": f"{JSON_BASE}/midjourney_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/midjourney/ff" },
+    # { "name": "midjourney_cdf", "json": f"{JSON_BASE}/midjourney_cdf.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/midjourney/cdf" },
 ]
 
-TEST_DATASETS = []
+_TEST_DATASETS_FF8 = [
+    { "name": "uniface_ff", "json": f"{JSON_BASE}/uniface_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/uniface/ff" },
+    { "name": "blendface_ff", "json": f"{JSON_BASE}/blendface_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/blendface/ff" },
+    { "name": "mobileswap_ff", "json": f"{JSON_BASE}/mobileswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/mobileswap/ff" },
+    { "name": "e4s_ff", "json": f"{JSON_BASE}/e4s_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/e4s/ff" },
+    { "name": "facedancer_ff", "json": f"{JSON_BASE}/facedancer_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/facedancer/ff" },
+    { "name": "fsgan_ff", "json": f"{JSON_BASE}/fsgan_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/fsgan/ff" },
+    { "name": "inswap_ff", "json": f"{JSON_BASE}/inswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/inswap/ff" },
+    { "name": "simswap_ff", "json": f"{JSON_BASE}/simswap_ff.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/simswap/ff" },
+]
+
+_TEST_DATASETS_OOD4 = [
+    { "name": "Celeb-DF-v2", "json": f"{JSON_BASE}/Celeb-DF-v2.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/Celeb-DF-v2" },
+    { "name": "DFDC", "json": f"{JSON_BASE}/DFDC.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DFDC" },
+    { "name": "DFDCP", "json": f"{JSON_BASE}/DFDCP.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/DFDCP" },
+    { "name": "UADFV", "json": f"{JSON_BASE}/UADFV.json", "enabled": True, "root": f"{DATA_ROOT_BASE}/UADFV" },
+]
+
+_TEST_DATASET_PRESETS = {
+    "ff8": _TEST_DATASETS_FF8,
+    "ff8_ood4": _TEST_DATASETS_FF8 + _TEST_DATASETS_OOD4,
+}
+
+
+def _resolve_test_datasets():
+    preset = str(TEST_DATASET_PRESET).strip().lower()
+    if preset not in _TEST_DATASET_PRESETS:
+        print(
+            f"[Warning] Unknown TEST_DATASET_PRESET={TEST_DATASET_PRESET!r}. "
+            "Fallback to 'ff8'."
+        )
+        preset = "ff8"
+
+    selected = [dict(x) for x in _TEST_DATASET_PRESETS[preset]]
+    print(f"[*] TEST_DATASET_PRESET: {preset} (datasets={len(selected)})")
+    return preset, selected
+
+
+RESOLVED_TEST_DATASET_PRESET, TEST_DATASETS = _resolve_test_datasets()
 
 # ---------------------------------------------------------
 # Path Helpers
@@ -335,10 +371,11 @@ def parse_dataset_json(json_path, split_name, data_root, dataset_name, target_co
             total_frames = len(frames)
 
             if mapped_label == 0:
-                selected_frames = frames
-            elif total_frames > NUM_FRAMES_PER_VIDEO:
-                indices = np.linspace(0, total_frames - 1, NUM_FRAMES_PER_VIDEO, dtype=int)
-                selected_frames = [frames[i] for i in indices]
+                pass
+            if total_frames > NUM_FRAMES_PER_VIDEO:
+                step = total_frames // NUM_FRAMES_PER_VIDEO
+                if step == 0: step = 1
+                selected_frames = [frames[i] for i in range(0, total_frames, step)][:NUM_FRAMES_PER_VIDEO]
             else:
                 selected_frames = frames
 
@@ -347,6 +384,134 @@ def parse_dataset_json(json_path, split_name, data_root, dataset_name, target_co
                 flat_data.append({"image_path": full_p, "label": mapped_label})
 
     return flat_data
+
+def parse_dataset_json_video_level(json_path, split_name, data_root, dataset_name,
+                                    num_frames=32, target_comp=TARGET_COMPRESSION):
+    """
+    Like parse_dataset_json but returns video-level data:
+    Each item has {video_id, image_path, label} and each video gets up to `num_frames` frames.
+    """
+    try:
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+    except Exception:
+        print(f"[Error] JSON Load Failed: {json_path}")
+        return []
+
+    flat_data = []
+    root_node = None
+    if isinstance(data, dict):
+        if dataset_name in data:
+            root_node = data[dataset_name]
+        elif "FaceForensics++" in data and "FaceForensics" in dataset_name:
+            root_node = data["FaceForensics++"]
+        else:
+            for k, v in data.items():
+                if dataset_name.lower() in k.lower():
+                    root_node = v
+                    break
+
+    if not root_node or not isinstance(root_node, dict):
+        valid_fallback = False
+        for k in data.keys():
+            for l_key in LABEL_MAP:
+                if l_key.lower() in k.lower():
+                    valid_fallback = True
+                    break
+            if valid_fallback:
+                break
+        if valid_fallback:
+            root_node = data
+        else:
+            print(f"[Warning] Could not find root node for {dataset_name} in JSON")
+            return []
+
+    for class_label, class_data in root_node.items():
+        mapped_label = None
+        best_len = -1
+        for key, val in LABEL_MAP.items():
+            if key.lower() in class_label.lower():
+                if len(key) > best_len:
+                    mapped_label = val
+                    best_len = len(key)
+        if mapped_label is None:
+            continue
+
+        if MULTITASK and mapped_label == 1:
+            mapped_label = 2 if _is_ai_generated_dataset(dataset_name) else 1
+
+        if split_name not in class_data:
+            continue
+
+        sub_info = class_data[split_name]
+        priorities = [target_comp, 'c40', 'c23']
+        video_dict = None
+
+        first_val = next(iter(sub_info.values())) if sub_info else None
+        if isinstance(first_val, dict) and ('frames' in first_val or 'label' in first_val):
+            video_dict = sub_info
+        else:
+            for p in priorities:
+                if p in sub_info:
+                    video_dict = sub_info[p]
+                    break
+
+        if not video_dict:
+            continue
+
+        for video_id, content in video_dict.items():
+            raw_frames = content.get('frames', [])
+            if not raw_frames:
+                continue
+
+            frames = sorted(raw_frames)
+            total_frames = len(frames)
+
+            # Select up to num_frames uniformly
+            if total_frames > num_frames:
+                step = total_frames // num_frames
+                if step == 0:
+                    step = 1
+                selected_frames = [frames[i] for i in range(0, total_frames, step)][:num_frames]
+            else:
+                selected_frames = frames
+
+            vid_key = f"{dataset_name}/{class_label}/{video_id}"
+            for raw_path in selected_frames:
+                full_p = smart_path_fixer(raw_path, data_root, dataset_name)
+                flat_data.append({
+                    "video_id": vid_key,
+                    "image_path": full_p,
+                    "label": mapped_label,
+                })
+
+    return flat_data
+
+
+def load_all_data_video_level(datasets_config, num_frames=32):
+    """Load test data with video_id preserved for video-level evaluation."""
+    all_data = []
+    seen = set()
+
+    for ds in datasets_config:
+        if not ds.get("enabled", False):
+            continue
+        print(f"[*] Processing (video-level): {ds['name']}")
+        base_root = ds.get("root", f"{DATA_ROOT_BASE}/{ds['name']}")
+        items = parse_dataset_json_video_level(
+            ds['json'], 'test', base_root, ds['name'],
+            num_frames=num_frames,
+        )
+        new_items = []
+        for item in items:
+            path = item['image_path']
+            if path and path not in seen:
+                seen.add(path)
+                new_items.append(item)
+        all_data.extend(new_items)
+        print(f"    -> Test found: {len(new_items)} (Raw: {len(items)})")
+
+    return all_data
 
 def load_all_data(datasets_config, train_only=False, test_only=False):
     train_all, test_all = [], []
@@ -394,6 +559,7 @@ def load_all_data(datasets_config, train_only=False, test_only=False):
 
     return train_all, test_all
 
+
 # ---------------------------------------------------------
 # Augmentation & Validation
 # ---------------------------------------------------------
@@ -403,19 +569,39 @@ val_aug = None
 
 def init_augs(image_size=IMAGE_SIZE):
     global train_aug, val_aug
+    if USE_CLIP:
+        norm_mean = (0.48145466, 0.4578275, 0.40821073)
+        norm_std = (0.26862954, 0.26130258, 0.27577711)
+        norm_name = "CLIP"
+    else:
+        norm_mean = (0.485, 0.456, 0.406)
+        norm_std = (0.229, 0.224, 0.225)
+        norm_name = "ImageNet/DINO"
+
     transforms_list = [
         A.HorizontalFlip(p=0.5),
+        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
+        A.HueSaturationValue(p=0.3),
+        A.ImageCompression(quality_lower=40, quality_upper=100, p=0.1),
+        A.GaussNoise(p=0.1),
+        A.MotionBlur(p=0.1),
+        A.CLAHE(p=0.1),
+        A.ChannelShuffle(p=0.1),
+        A.CoarseDropout(max_holes=8, max_height=32, max_width=32, p=0.1), # A.Cutout 대체
+        A.RandomGamma(p=0.3),
+        A.GlassBlur(p=0.3),
         A.Resize(image_size, image_size),
-        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        A.Normalize(mean=norm_mean, std=norm_std),
         ToTensorV2()
     ]
 
     train_aug = A.Compose(transforms_list)
     print(f"[*] Train Augmentations: {transforms_list}")
+    print(f"[*] Input normalization: {norm_name} mean={norm_mean}, std={norm_std}")
 
     val_aug = A.Compose([
         A.Resize(image_size, image_size),
-        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        A.Normalize(mean=norm_mean, std=norm_std),
         ToTensorV2()
     ])
 

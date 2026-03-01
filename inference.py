@@ -9,6 +9,7 @@ Includes:
 
 import argparse
 import heapq
+import json
 import os
 import random
 import shutil
@@ -23,11 +24,12 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import yaml
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from tqdm import tqdm
-from transformers import AutoConfig, AutoModel
+from transformers import AutoConfig, AutoModel, CLIPVisionModel
 from transformers.modeling_outputs import ImageClassifierOutput
 
 # timm compatibility patch (required by some transformers backbones)
@@ -64,6 +66,14 @@ DETECTOR_MODEL_FILE = os.path.join(SCRIPT_DIR, "retinaface", "det_10g.onnx")
 
 IMAGE_SIZE = 224
 VIDEO_AGG = "topk_confidence"
+DEFAULT_LAYERNORM_PATTERNS = ["norm1", "norm2", "norm"]
+DEFAULT_USE_CLIP = False
+DEFAULT_CLIP_MODEL = "openai/clip-vit-large-patch14"
+DEFAULT_BACKBONE_DIR = "./backbone"
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
+CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
 
 # Embedded backbone config (formerly model/model_config/config.json)
 DINOV3_BACKBONE_CONFIG = {
@@ -135,6 +145,77 @@ DINOV3_BACKBONE_CONFIG = {
     "use_gated_mlp": True,
     "value_bias": True,
 }
+
+
+# ==============================================================================
+# Runtime config helpers
+# ==============================================================================
+def _parse_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    sval = str(value).strip().lower()
+    if sval in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if sval in {"0", "false", "f", "no", "n", "off", "", "none", "null"}:
+        return False
+    return default
+
+
+def _parse_optional_str(value):
+    if value is None:
+        return None
+    sval = str(value).strip()
+    if sval.lower() in {"", "none", "null"}:
+        return None
+    return sval
+
+
+def _resolve_backbone_dir(path_value):
+    raw = _parse_optional_str(path_value) or DEFAULT_BACKBONE_DIR
+    if os.path.isabs(raw):
+        return raw
+    return os.path.abspath(os.path.join(SCRIPT_DIR, raw))
+
+
+def _resolve_local_model_path(model_id, backbone_dir):
+    if not model_id:
+        return None
+    if os.path.isdir(model_id):
+        return model_id
+    candidate = os.path.join(backbone_dir, model_id)
+    if os.path.isdir(candidate):
+        return candidate
+    return None
+
+
+def _load_runtime_config():
+    config_path = os.path.join(SCRIPT_DIR, "config", "config.yaml")
+    cfg = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+        except Exception as exc:
+            print(f"[Warn] Failed to read config.yaml ({config_path}): {exc}")
+            cfg = {}
+
+    use_clip = _parse_bool(cfg.get("clip", DEFAULT_USE_CLIP), DEFAULT_USE_CLIP)
+    clip_model = _parse_optional_str(cfg.get("clip_model", DEFAULT_CLIP_MODEL)) or DEFAULT_CLIP_MODEL
+    backbone_dir = _resolve_backbone_dir(cfg.get("backbone_dir", DEFAULT_BACKBONE_DIR))
+    return {
+        "path": config_path,
+        "has_config": os.path.exists(config_path),
+        "use_clip": bool(use_clip),
+        "clip_model": clip_model,
+        "backbone_dir": backbone_dir,
+    }
+
+
+RUNTIME_CONFIG = _load_runtime_config()
 
 
 # ==============================================================================
@@ -1179,13 +1260,41 @@ class CompetitionDataset(Dataset):
 # Model (merged from inference_last.py)
 # ==============================================================================
 class DINOv3ForClassification(nn.Module):
-    def __init__(self, num_labels=1):
+    def __init__(self, num_labels=1, normalize_inputs=True, use_clip=False, clip_model=DEFAULT_CLIP_MODEL):
         super().__init__()
-        print("[*] Loading Backbone config (embedded)")
-        config_kwargs = dict(DINOV3_BACKBONE_CONFIG)
-        model_type = config_kwargs.pop("model_type")
-        config = AutoConfig.for_model(model_type, **config_kwargs)
-        self.backbone = AutoModel.from_config(config, trust_remote_code=True)
+        self.is_clip = bool(use_clip)
+        self.clip_model = _parse_optional_str(clip_model) or DEFAULT_CLIP_MODEL
+
+        if self.is_clip:
+            local_clip_path = _resolve_local_model_path(self.clip_model, RUNTIME_CONFIG["backbone_dir"])
+            clip_source = local_clip_path if local_clip_path is not None else self.clip_model
+            local_only = local_clip_path is not None
+            source_kind = "local" if local_only else "huggingface_hub"
+            print(f"[*] Encoder type: CLIP")
+            print(f"[*] Loading CLIPVisionModel ({source_kind}): {clip_source}")
+            try:
+                self.backbone = CLIPVisionModel.from_pretrained(
+                    clip_source,
+                    local_files_only=local_only,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to load CLIP vision model.\n"
+                    f"  - requested clip_model: {self.clip_model!r}\n"
+                    f"  - tried source: {clip_source!r}\n"
+                    f"  - local_files_only: {local_only}\n"
+                    "Check clip_model path/name and ensure weights are available "
+                    "locally or cached from Hugging Face."
+                ) from exc
+            config = self.backbone.config
+        else:
+            print("[*] Encoder type: DINO")
+            print("[*] Loading Backbone config (embedded)")
+            config_kwargs = dict(DINOV3_BACKBONE_CONFIG)
+            model_type = config_kwargs.pop("model_type")
+            config = AutoConfig.for_model(model_type, **config_kwargs)
+            self.backbone = AutoModel.from_config(config, trust_remote_code=True)
+        self.normalize_inputs = bool(normalize_inputs)
 
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -1201,10 +1310,20 @@ class DINOv3ForClassification(nn.Module):
         nn.init.xavier_uniform_(self.classifier.weight)
         if self.classifier.bias is not None:
             nn.init.zeros_(self.classifier.bias)
+        print(f"[*] GenD L2-normalized head: {'enabled' if self.normalize_inputs else 'disabled'}")
 
     def forward(self, pixel_values, labels=None):
-        outputs = self.backbone(pixel_values)
-        cls_token = outputs.last_hidden_state[:, 0, :]
+        outputs = self.backbone(pixel_values=pixel_values)
+        if hasattr(outputs, "last_hidden_state") and outputs.last_hidden_state is not None:
+            cls_token = outputs.last_hidden_state[:, 0, :]
+        elif hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+            cls_token = outputs.pooler_output
+        else:
+            raise RuntimeError(
+                "Backbone output does not contain last_hidden_state or pooler_output."
+            )
+        if self.normalize_inputs:
+            cls_token = F.normalize(cls_token, p=2, dim=1)
         if cls_token.dtype != self.classifier.weight.dtype:
             cls_token = cls_token.to(self.classifier.weight.dtype)
         logits = self.classifier(cls_token)
@@ -1246,7 +1365,226 @@ def _infer_num_labels_from_state_dict(state_dict, default_num_labels=1):
     return int(default_num_labels)
 
 
-def load_model(weight_path, device, num_labels=None):
+def _is_adapter_state_dict(state_dict):
+    """Check if the state dict contains only adapter (LoRA) weights."""
+    return any("lora_" in k for k in state_dict.keys())
+
+
+def _normalize_layernorm_patterns(patterns):
+    if patterns is None:
+        patterns = DEFAULT_LAYERNORM_PATTERNS
+    patterns = [str(p).lower() for p in patterns if str(p).strip()]
+    if not patterns:
+        patterns = DEFAULT_LAYERNORM_PATTERNS
+    return patterns
+
+
+def _collect_layernorm_modules_to_save(backbone, patterns=None):
+    patterns = _normalize_layernorm_patterns(patterns)
+    module_names = set()
+    for name, _ in backbone.named_parameters():
+        lname = name.lower()
+        if not any(pattern in lname for pattern in patterns):
+            continue
+        if "." not in name:
+            continue
+        module_name = name.rsplit(".", 1)[0]
+        module_names.add(f"backbone.{module_name}")
+    return sorted(module_names)
+
+
+def _collect_layernorm_modules_from_checkpoint(state_dict, patterns=None):
+    patterns = _normalize_layernorm_patterns(patterns)
+    prefix = "base_model.model.backbone."
+
+    module_names = set()
+    for key in state_dict.keys():
+        if not key.startswith(prefix):
+            continue
+        if ".lora_" in key:
+            continue
+        if not (key.endswith(".weight") or key.endswith(".bias")):
+            continue
+
+        module_name = key[len("base_model.model."):].rsplit(".", 1)[0]
+        if any(pattern in module_name.lower() for pattern in patterns):
+            module_names.add(module_name)
+
+    return sorted(module_names)
+
+
+def _build_peft_model_for_inference(
+    model,
+    state_dict=None,
+    layernorm_patterns=None,
+    lora_rank=1,
+    lora_alpha=2,
+):
+    """Build a PEFT model matching the training config for inference."""
+    from peft import LoraConfig, get_peft_model
+    linear_names = [n for n, m in model.backbone.named_modules() if isinstance(m, nn.Linear)]
+    target_modules = [p for p in ["q_proj", "k_proj", "v_proj", "o_proj"] if any(p in n for n in linear_names)]
+    if not target_modules:
+        target_modules = [p for p in ["up_proj", "down_proj"] if any(p in n for n in linear_names)]
+    if not target_modules:
+        target_modules = list({n.split(".")[-1] for n in linear_names})
+
+    if state_dict is not None:
+        ln_modules_to_save = _collect_layernorm_modules_from_checkpoint(state_dict, layernorm_patterns)
+        source = "checkpoint"
+    else:
+        ln_modules_to_save = _collect_layernorm_modules_to_save(model.backbone, layernorm_patterns)
+        source = "backbone"
+
+    preview = ", ".join(ln_modules_to_save[:5]) if ln_modules_to_save else "(none)"
+    print(
+        f"[*] LN modules_to_save ({source}): {len(ln_modules_to_save)} modules "
+        f"(preview: {preview})"
+    )
+    modules_to_save = ["classifier"] + ln_modules_to_save
+
+    print(f"[*] Inference LoRA config: r={lora_rank}, alpha={lora_alpha}")
+    peft_config = LoraConfig(
+        r=lora_rank,
+        lora_alpha=lora_alpha,
+        target_modules=target_modules,
+        lora_dropout=0.0,  # inference 시 dropout 비활성화
+        bias="none",
+        modules_to_save=modules_to_save,
+        init_lora_weights="pissa",
+    )
+    model = get_peft_model(model, peft_config)
+    return model
+
+
+def _infer_lora_rank_from_state_dict(state_dict):
+    for key, value in state_dict.items():
+        if not key.endswith("lora_A.weight"):
+            continue
+        if hasattr(value, "shape") and len(value.shape) == 2:
+            return int(value.shape[0])
+    return None
+
+
+def _resolve_adapter_config_path(weight_path, model_pt_path):
+    candidates = []
+    if os.path.isdir(weight_path):
+        candidates.append(os.path.join(weight_path, "adapter_config.json"))
+    candidates.append(os.path.join(os.path.dirname(model_pt_path), "adapter_config.json"))
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        norm = os.path.abspath(candidate)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        if os.path.exists(norm):
+            return norm
+    return None
+
+
+def _load_adapter_config(weight_path, model_pt_path):
+    cfg_path = _resolve_adapter_config_path(weight_path, model_pt_path)
+    if cfg_path is None:
+        return None, None
+
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if not isinstance(payload, dict):
+            print(f"[Warn] adapter_config is not a dict: {cfg_path}")
+            return None, cfg_path
+        return payload, cfg_path
+    except Exception as exc:
+        print(f"[Warn] Failed to read adapter_config.json ({cfg_path}): {exc}")
+        return None, cfg_path
+
+
+def _resolve_lora_hparams(weight_path, model_pt_path, state_dict, cli_rank=None, cli_alpha=None):
+    adapter_cfg, adapter_cfg_path = _load_adapter_config(weight_path, model_pt_path)
+
+    rank_source = "default"
+    alpha_source = "default"
+
+    if cli_rank is not None:
+        lora_rank = int(cli_rank)
+        rank_source = "cli"
+    elif adapter_cfg is not None and adapter_cfg.get("lora_rank") is not None:
+        lora_rank = int(adapter_cfg["lora_rank"])
+        rank_source = f"adapter_config:{adapter_cfg_path}"
+    else:
+        inferred_rank = _infer_lora_rank_from_state_dict(state_dict)
+        if inferred_rank is not None:
+            lora_rank = int(inferred_rank)
+            rank_source = "state_dict"
+        else:
+            lora_rank = 1
+
+    if cli_alpha is not None:
+        lora_alpha = int(cli_alpha)
+        alpha_source = "cli"
+    elif adapter_cfg is not None and adapter_cfg.get("lora_alpha") is not None:
+        lora_alpha = int(adapter_cfg["lora_alpha"])
+        alpha_source = f"adapter_config:{adapter_cfg_path}"
+    else:
+        lora_alpha = 2
+
+    if lora_rank <= 0:
+        raise ValueError(f"Invalid LoRA rank: {lora_rank}")
+    if lora_alpha <= 0:
+        raise ValueError(f"Invalid LoRA alpha: {lora_alpha}")
+
+    print(f"[*] Resolved LoRA rank={lora_rank} ({rank_source})")
+    print(f"[*] Resolved LoRA alpha={lora_alpha} ({alpha_source})")
+    return lora_rank, lora_alpha
+
+
+def _resolve_clip_settings(weight_path, model_pt_path, cli_clip=None, cli_clip_model=None):
+    adapter_cfg, adapter_cfg_path = _load_adapter_config(weight_path, model_pt_path)
+    cfg_source = f"config:{RUNTIME_CONFIG['path']}" if RUNTIME_CONFIG["has_config"] else "default"
+
+    clip_source = cfg_source
+    clip_model_source = cfg_source
+
+    if cli_clip is not None:
+        use_clip = bool(cli_clip)
+        clip_source = "cli"
+    elif adapter_cfg is not None and adapter_cfg.get("clip") is not None:
+        use_clip = _parse_bool(adapter_cfg.get("clip"), RUNTIME_CONFIG["use_clip"])
+        clip_source = f"adapter_config:{adapter_cfg_path}"
+    else:
+        use_clip = bool(RUNTIME_CONFIG["use_clip"])
+
+    cli_clip_model_norm = _parse_optional_str(cli_clip_model)
+    adapter_clip_model = None
+    if adapter_cfg is not None:
+        adapter_clip_model = _parse_optional_str(adapter_cfg.get("clip_model"))
+
+    if cli_clip_model_norm is not None:
+        clip_model = cli_clip_model_norm
+        clip_model_source = "cli"
+    elif adapter_clip_model is not None:
+        clip_model = adapter_clip_model
+        clip_model_source = f"adapter_config:{adapter_cfg_path}"
+    else:
+        clip_model = RUNTIME_CONFIG["clip_model"]
+
+    print(f"[*] Resolved clip={use_clip} ({clip_source})")
+    print(f"[*] Resolved clip_model={clip_model!r} ({clip_model_source})")
+    return bool(use_clip), clip_model
+
+
+def load_model(
+    weight_path,
+    device,
+    num_labels=None,
+    lora_rank=None,
+    lora_alpha=None,
+    clip=None,
+    clip_model=None,
+):
     print(f"[*] Loading model from {weight_path}...")
 
     model_pt_path = _resolve_model_pt_path(weight_path)
@@ -1256,12 +1594,42 @@ def load_model(weight_path, device, num_labels=None):
         num_labels = inferred_num_labels
     print(f"[*] Using num_labels={num_labels} (model.pt suggests {inferred_num_labels})")
 
-    model = DINOv3ForClassification(num_labels=num_labels)
-    model.load_state_dict(state_dict, strict=True)
+    resolved_clip, resolved_clip_model = _resolve_clip_settings(
+        weight_path=weight_path,
+        model_pt_path=model_pt_path,
+        cli_clip=clip,
+        cli_clip_model=clip_model,
+    )
+    model = DINOv3ForClassification(
+        num_labels=num_labels,
+        use_clip=resolved_clip,
+        clip_model=resolved_clip_model,
+    )
+
+    if _is_adapter_state_dict(state_dict):
+        print("[*] Detected adapter-only checkpoint, rebuilding PEFT model...")
+        resolved_rank, resolved_alpha = _resolve_lora_hparams(
+            weight_path=weight_path,
+            model_pt_path=model_pt_path,
+            state_dict=state_dict,
+            cli_rank=lora_rank,
+            cli_alpha=lora_alpha,
+        )
+        model = _build_peft_model_for_inference(
+            model,
+            state_dict=state_dict,
+            lora_rank=resolved_rank,
+            lora_alpha=resolved_alpha,
+        )
+        from peft import set_peft_model_state_dict
+        set_peft_model_state_dict(model, state_dict)
+    else:
+        model.load_state_dict(state_dict, strict=True)
+
     model = model.float()
     model.to(device)
     model.eval()
-    return model
+    return model, resolved_clip, resolved_clip_model
 
 
 # ==============================================================================
@@ -1301,14 +1669,32 @@ def run_model_inference(args, cropped_dir):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[*] Using device: {device}")
 
-    model = load_model(args.weight, device, num_labels=args.num_labels)
+    model, resolved_clip, resolved_clip_model = load_model(
+        args.weight,
+        device,
+        num_labels=args.num_labels,
+        lora_rank=args.lora_rank,
+        lora_alpha=args.lora_alpha,
+        clip=args.clip,
+        clip_model=args.clip_model,
+    )
+    args.clip = resolved_clip
+    args.clip_model = resolved_clip_model
     original_ext_map = load_original_extension_map(args.input_root)
+
+    if resolved_clip:
+        norm_mean, norm_std = CLIP_MEAN, CLIP_STD
+        norm_name = "CLIP"
+    else:
+        norm_mean, norm_std = IMAGENET_MEAN, IMAGENET_STD
+        norm_name = "ImageNet/DINO"
+    print(f"[*] Inference normalization: {norm_name} mean={norm_mean}, std={norm_std}")
 
     transform = transforms.Compose(
         [
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.Normalize(mean=norm_mean, std=norm_std),
         ]
     )
 
@@ -1422,6 +1808,21 @@ def get_args():
 
     parser.add_argument("--batch_size", type=int, default=64, help="Inference batch size")
     parser.add_argument("--num_labels", type=int, default=None, help="Override classifier output dimension")
+    parser.add_argument("--lora_rank", type=int, default=None, help="Override LoRA rank for adapter checkpoints")
+    parser.add_argument("--lora_alpha", type=int, default=None, help="Override LoRA alpha for adapter checkpoints")
+    parser.add_argument(
+        "--clip",
+        dest="clip",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Use CLIP vision encoder (priority: CLI > adapter_config > config.yaml > default).",
+    )
+    parser.add_argument(
+        "--clip_model",
+        type=str,
+        default=None,
+        help="CLIP model id/path override (priority: CLI > adapter_config > config.yaml > default).",
+    )
     parser.add_argument("--video_agg", type=str, default=VIDEO_AGG, choices=[VIDEO_AGG], help="Video aggregation")
     parser.add_argument("--topk", type=int, default=12, help="Top-k for topk_confidence")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
@@ -1436,12 +1837,19 @@ def get_args():
 
     args = parser.parse_args()
     args.target_size = parse_target_size(args.target_size)
+    args.clip_model = _parse_optional_str(args.clip_model)
     return args
 
 
 def main():
     pipeline_start = time.perf_counter()
     args = get_args()
+    cfg_label = RUNTIME_CONFIG["path"] if RUNTIME_CONFIG["has_config"] else "(not found)"
+    print(f"[*] Runtime config source: {cfg_label}")
+    print(
+        f"[*] Runtime defaults: clip={RUNTIME_CONFIG['use_clip']}, "
+        f"clip_model={RUNTIME_CONFIG['clip_model']!r}"
+    )
     seed_everything(args.seed)
 
     preprocess_start = time.perf_counter()

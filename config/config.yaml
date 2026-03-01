@@ -1,29 +1,52 @@
 # [1] Data Paths
 # 절대경로 대신 제출 폴더 기준 상대경로 사용
-data_root_base: "./train_data"
-json_base: "./config/dataset_json"
+data_root_base: "/workspace/Hecto_deepfake/likelihood_submission/train_data"
+json_base: "/workspace/Hecto_deepfake/preprocessing/dataset_json"
 
 # [2] Model
 # 원본 config.py의 MODEL_ID
 backbone_model: "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+# CLIP 인코더 토글 (true면 학습/테스트/추론에서 CLIP Vision Encoder 사용)
+clip: False
+# clip=true일 때 사용할 CLIP 모델 ID 또는 로컬 경로
+clip_model: "laion/CLIP-ViT-g-14-laion2B-s12B-b42K"
 # 로컬 백본 루트 폴더 (train.py는 여기서만 로드)
 backbone_dir: "./backbone"
 # 원본 config.py의 DEFAULT_OUTPUT_BASE
-output_dir: "./weights/dinov3-h+"
+output_dir: "./weights/clip-g14_laion2b_s12b_b42k_pissa_LN-01"
 
 # [3] Hyperparameters
 # 원본 config.py의 상수 값들
 image_size: 224
 target_compression: "c23"
-epochs: 3                       # NUM_EPOCHS
-batch_size: 64                  # BATCH_SIZE
+epochs: 10                       # NUM_EPOCHS
+batch_size: 192                 # reduced for 2-GPU DataParallel stability
 learning_rate: 1e-3             # 1e-3
+ddp_timeout_seconds: 10800      # 3h; avoids NCCL timeout during long rank0-only callback eval
 seed: null                      # SEED (null이면 미설정)
-num_workers: 8                  # NUM_WORKERS
-use_peft: true                 # USE_PEFT
+num_workers: 16                  # NUM_WORKERS
+use_peft: true                # USE_PEFT
+lora_rank: 1                  # LoRA rank r
+lora_alpha: 2                 # LoRA alpha
+use_layernorm_tuning: true     # GenD: LayerNorm tuning (can be combined with PEFT, disabled when EFFORT=true)
+layernorm_patterns: ["norm1", "norm2", "norm"]  # GenD DINOv3 LN pattern
+layernorm_lr_scale: 0.1        # LayerNorm param LR = learning_rate * layernorm_lr_scale
+use_gend_l2_head: true         # GenD: L2-normalized features before classifier
+use_effort: false              # USE_EFFORT (Orthogonal Subspace Decomposition)
+effort_rank: 1                # SVD rank r (top-r frozen, rest trainable)
+effort_ortho_weight: 0.1       # Orthogonality regularization weight
+effort_keepsv_weight: 0.1     # Singular value constraint weight
 
 # [4] Arguments (Defaults)
 # 원본 argparse의 default 값들
-num_frames_per_video: 12        # args.num_frames (default 12)
+num_frames_per_video: 8        # args.num_frames (default 12)
 multitask: false                # args.multitask (default false)
 label_smoothing: 0.0            # args.label_smoothing (default 0.0)
+
+# [5] Logging
+wandb_project: "Hecto_deepfake"
+wandb_run_name: null
+
+# [6] Test Mode
+test_mode: False               # run training, then per-dataset evaluation via callback
+test_num_frames: 32             # number of frames per video for test-time evaluation

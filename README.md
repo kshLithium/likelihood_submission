@@ -95,7 +95,7 @@ python inference.py
 
 ### 6.4 학습데이터 다운로드
 학습데이터를 train_data에 위치시키면 됩니다.
-학습 데이터 링크: https://drive.google.com/file/d/1xSmhkJoTs_QNQ9wkRuK2Uoz__Eeh456V/view?usp=sharing
+학습 데이터 링크: 삭제
 
 예시 디렉토리 구조(`train_data/train_data`처럼 중첩되지 않도록 주의):
 ```text

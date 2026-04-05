@@ -1,4 +1,4 @@
-# Hecto Deepfake Challenge 제출 코드 (4/488) 장려상 수상
+# Hecto Deepfake Challenge 제출 코드 장려상 수상 (4/488) 
 
 ## 1. 문서 목적
 이 문서는 `likelihood_submission` 제출 패키지의 실행 방법, 대회 규칙 대응 현황, 운영 전 최종 점검 항목을 정리한 문서입니다.
